@@ -2,6 +2,18 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { supabase } from '../lib/supabase'
 
+// Helper function to extract last name for sorting
+const getLastName = (fullName) => {
+  const parts = fullName.trim().split(/\s+/)
+  return parts[parts.length - 1].toLowerCase()
+}
+
+const sortByLastName = (a, b) => {
+  const lastNameA = getLastName(a)
+  const lastNameB = getLastName(b)
+  return lastNameA.localeCompare(lastNameB)
+}
+
 const defaultTrios = [
   {
     id: 'trio-1',
@@ -281,7 +293,7 @@ export default function RoleMatcher({ session }) {
       return
     }
     
-    setStakeholders(prev => [...prev, name].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())))
+    setStakeholders(prev => [...prev, name].sort(sortByLastName))
     setNewStakeholder('')
     setDuplicateWarning('')
     setSaveStatus('unsaved')
@@ -297,7 +309,7 @@ export default function RoleMatcher({ session }) {
     // Case-insensitive deduplication
     const existingLower = stakeholders.map(s => s.toLowerCase())
     const newNames = names.filter(n => !existingLower.includes(n.toLowerCase()))
-    const unique = [...stakeholders, ...newNames].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    const unique = [...stakeholders, ...newNames].sort(sortByLastName)
     
     const duplicateCount = names.length - newNames.length
     if (duplicateCount > 0) {
@@ -451,10 +463,8 @@ export default function RoleMatcher({ session }) {
       }
     }, [isOpen])
 
-    // Sort alphabetically and filter
-    const sortedStakeholders = [...stakeholders].sort((a, b) => 
-      a.toLowerCase().localeCompare(b.toLowerCase())
-    )
+    // Sort by last name and filter
+    const sortedStakeholders = [...stakeholders].sort(sortByLastName)
     
     const filtered = sortedStakeholders.filter(s => 
       s.toLowerCase().includes(search.toLowerCase())
@@ -636,7 +646,7 @@ export default function RoleMatcher({ session }) {
               <p className="text-sm text-slate-400 italic">No stakeholders added yet</p>
             ) : (
               [...stakeholders]
-                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                .sort(sortByLastName)
                 .map(name => (
                   <span key={name} className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-sm">
                     {name}
