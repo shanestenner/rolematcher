@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import ReactDOM from 'react-dom'
 import { supabase } from '../lib/supabase'
 
 const defaultTrios = [
@@ -266,13 +267,24 @@ export default function RoleMatcher({ session }) {
   }
 
   // Stakeholder management
+  const [duplicateWarning, setDuplicateWarning] = useState('')
+  
   const addStakeholder = () => {
     const name = newStakeholder.trim()
-    if (name && !stakeholders.includes(name)) {
-      setStakeholders(prev => [...prev, name].sort((a, b) => a.localeCompare(b)))
-      setNewStakeholder('')
-      setSaveStatus('unsaved')
+    if (!name) return
+    
+    // Case-insensitive duplicate check
+    const isDuplicate = stakeholders.some(s => s.toLowerCase() === name.toLowerCase())
+    if (isDuplicate) {
+      setDuplicateWarning(`"${name}" is already in the stakeholder pool`)
+      setTimeout(() => setDuplicateWarning(''), 3000)
+      return
     }
+    
+    setStakeholders(prev => [...prev, name].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())))
+    setNewStakeholder('')
+    setDuplicateWarning('')
+    setSaveStatus('unsaved')
   }
 
   const removeStakeholder = (name) => {
@@ -282,7 +294,17 @@ export default function RoleMatcher({ session }) {
 
   const addMultipleStakeholders = (text) => {
     const names = text.split(/[\n,]/).map(n => n.trim()).filter(n => n)
-    const unique = [...new Set([...stakeholders, ...names])].sort((a, b) => a.localeCompare(b))
+    // Case-insensitive deduplication
+    const existingLower = stakeholders.map(s => s.toLowerCase())
+    const newNames = names.filter(n => !existingLower.includes(n.toLowerCase()))
+    const unique = [...stakeholders, ...newNames].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    
+    const duplicateCount = names.length - newNames.length
+    if (duplicateCount > 0) {
+      setDuplicateWarning(`${duplicateCount} duplicate name(s) skipped`)
+      setTimeout(() => setDuplicateWarning(''), 3000)
+    }
+    
     setStakeholders(unique)
     setSaveStatus('unsaved')
   }
@@ -403,11 +425,14 @@ export default function RoleMatcher({ session }) {
   const SearchableDropdown = ({ value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false)
     const [search, setSearch] = useState('')
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
+    const buttonRef = useRef(null)
     const dropdownRef = useRef(null)
 
     useEffect(() => {
       const handleClickOutside = (e) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        if (buttonRef.current && !buttonRef.current.contains(e.target) &&
+            dropdownRef.current && !dropdownRef.current.contains(e.target)) {
           setIsOpen(false)
         }
       }
@@ -415,13 +440,42 @@ export default function RoleMatcher({ session }) {
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
-    const filtered = stakeholders.filter(s => 
+    useEffect(() => {
+      if (isOpen && buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect()
+        setDropdownPosition({
+          top: rect.bottom + window.scrollY + 4,
+          left: rect.left + window.scrollX,
+          width: rect.width
+        })
+      }
+    }, [isOpen])
+
+    // Sort alphabetically and filter
+    const sortedStakeholders = [...stakeholders].sort((a, b) => 
+      a.toLowerCase().localeCompare(b.toLowerCase())
+    )
+    
+    const filtered = sortedStakeholders.filter(s => 
       s.toLowerCase().includes(search.toLowerCase())
     )
 
+    const handleSelect = (name) => {
+      onChange(name)
+      setIsOpen(false)
+      setSearch('')
+    }
+
+    const handleClear = () => {
+      onChange('')
+      setIsOpen(false)
+      setSearch('')
+    }
+
     return (
-      <div className="relative" ref={dropdownRef}>
+      <>
         <div 
+          ref={buttonRef}
           className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white cursor-pointer flex items-center justify-between text-sm"
           onClick={() => setIsOpen(!isOpen)}
         >
@@ -433,8 +487,18 @@ export default function RoleMatcher({ session }) {
           </svg>
         </div>
         
-        {isOpen && (
-          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+        {isOpen && ReactDOM.createPortal(
+          <div 
+            ref={dropdownRef}
+            className="bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden"
+            style={{ 
+              position: 'absolute',
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              width: dropdownPosition.width,
+              zIndex: 9999
+            }}
+          >
             <div className="p-2 border-b border-slate-100">
               <input
                 type="text"
@@ -449,30 +513,31 @@ export default function RoleMatcher({ session }) {
               {value && (
                 <div
                   className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 cursor-pointer border-b border-slate-100"
-                  onClick={() => { onChange(''); setIsOpen(false); setSearch('') }}
+                  onClick={handleClear}
                 >
                   ✕ Clear assignment
                 </div>
               )}
               {filtered.length === 0 ? (
                 <div className="px-3 py-3 text-sm text-slate-400 text-center">
-                  {stakeholders.length === 0 ? 'Add stakeholders below first' : 'No matches found'}
+                  {stakeholders.length === 0 ? 'Add stakeholders above first' : 'No matches found'}
                 </div>
               ) : (
                 filtered.map(name => (
                   <div
                     key={name}
                     className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${value === name ? 'bg-blue-100 font-medium' : ''}`}
-                    onClick={() => { onChange(name); setIsOpen(false); setSearch('') }}
+                    onClick={() => handleSelect(name)}
                   >
                     {name}
                   </div>
                 ))
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
-      </div>
+      </>
     )
   }
 
@@ -559,22 +624,30 @@ export default function RoleMatcher({ session }) {
               />
             </div>
           </details>
+
+          {duplicateWarning && (
+            <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+              {duplicateWarning}
+            </div>
+          )}
           
           <div className="flex flex-wrap gap-2">
             {stakeholders.length === 0 ? (
               <p className="text-sm text-slate-400 italic">No stakeholders added yet</p>
             ) : (
-              stakeholders.map(name => (
-                <span key={name} className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-sm">
-                  {name}
-                  <button
-                    onClick={() => removeStakeholder(name)}
-                    className="ml-1 text-slate-400 hover:text-red-500 font-bold"
-                  >
-                    ×
-                  </button>
-                </span>
-              ))
+              [...stakeholders]
+                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                .map(name => (
+                  <span key={name} className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 text-slate-700 rounded-full text-sm">
+                    {name}
+                    <button
+                      onClick={() => removeStakeholder(name)}
+                      className="ml-1 text-slate-400 hover:text-red-500 font-bold"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))
             )}
           </div>
         </div>
@@ -584,7 +657,7 @@ export default function RoleMatcher({ session }) {
           {trios.map((trio) => {
             const colors = colorSchemes[trio.color] || colorSchemes.slate
             return (
-              <div key={trio.id} className={`rounded-2xl border-2 ${colors.bg} ${colors.border} overflow-hidden shadow-sm`}>
+              <div key={trio.id} className={`rounded-2xl border-2 ${colors.bg} ${colors.border} shadow-sm`} style={{ overflow: 'visible' }}>
                 <div className={`${colors.header} px-4 py-3 border-b border-opacity-50`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
@@ -624,9 +697,9 @@ export default function RoleMatcher({ session }) {
                     </div>
                   </div>
                 </div>
-                <div className="p-3 space-y-2">
-                  {trio.roles.map((role) => (
-                    <div key={role.id} className="bg-white rounded-xl p-3 shadow-sm border border-slate-100">
+                <div className="p-3 space-y-2" style={{ overflow: 'visible' }}>
+                  {trio.roles.map((role, roleIndex) => (
+                    <div key={role.id} className="bg-white rounded-xl p-3 shadow-sm border border-slate-100" style={{ position: 'relative', zIndex: 10 - roleIndex }}>
                       <div className="flex items-center gap-2 mb-2">
                         <TypeBadge type={role.type} />
                         <input

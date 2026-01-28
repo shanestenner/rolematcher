@@ -11,6 +11,21 @@ export default function Auth() {
     setLoading(true)
     setMessage({ type: '', text: '' })
 
+    // Validate email domain
+    // Another comment here
+    const emailLower = email.toLowerCase()
+    const allowedDomains = ['vanderbilt.edu', 'vumc.org']
+    const isValidDomain = allowedDomains.some(domain => emailLower.endsWith(`@${domain}`))
+
+    if (!isValidDomain) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Only vanderbilt.edu and vumc.org email addresses are allowed.' 
+      })
+      setLoading(false)
+      return
+    }
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -50,7 +65,7 @@ export default function Auth() {
               <input
                 id="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="you@vanderbilt.edu"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -79,7 +94,7 @@ export default function Auth() {
 
           <p className="mt-6 text-center text-xs text-slate-400">
             You'll receive a secure login link via email.<br />
-            No password required.
+            Only vanderbilt.edu and vumc.org addresses accepted.
           </p>
         </div>
       </div>
