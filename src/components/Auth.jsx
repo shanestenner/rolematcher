@@ -40,7 +40,7 @@ export default function Auth() {
       setShowOtpInput(true)
       setMessage({ 
         type: 'success', 
-        text: 'Check your email for the 6-digit login code!' 
+        text: 'Check your email for the 8-digit login code!' 
       })
     }
     setLoading(false)
@@ -114,7 +114,7 @@ export default function Auth() {
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div>
                 <label htmlFor="otp" className="block text-sm font-medium text-slate-700 mb-1">
-                  Enter 6-Digit Code
+                  Enter 8-Digit Code
                 </label>
                 <p className="text-xs text-slate-500 mb-2">
                   Sent to {email}
@@ -124,8 +124,8 @@ export default function Auth() {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  maxLength={6}
-                  placeholder="000000"
+                  maxLength={8}
+                  placeholder="00000000"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
                   required
@@ -136,7 +136,7 @@ export default function Auth() {
 
               <button
                 type="submit"
-                disabled={loading || otpCode.length !== 6}
+                disabled={loading || otpCode.length !== 8}
                 className="w-full px-4 py-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Verifying...' : 'Sign In'}
@@ -164,7 +164,7 @@ export default function Auth() {
 
           <p className="mt-6 text-center text-xs text-slate-400">
             {!showOtpInput 
-              ? <>You'll receive a 6-digit login code via email.<br />Only vanderbilt.edu and vumc.org addresses accepted.</>
+              ? <>You'll receive an 8-digit login code via email.<br />Only vanderbilt.edu and vumc.org addresses accepted.</>
               : <>The code expires in 1 hour.<br />Check spam if you don't see it.</>
             }
           </p>
