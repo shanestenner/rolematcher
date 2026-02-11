@@ -4,15 +4,16 @@ import { supabase } from '../lib/supabase'
 export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [showOtpInput, setShowOtpInput] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
 
-  const handleLogin = async (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault()
     setLoading(true)
     setMessage({ type: '', text: '' })
 
     // Validate email domain
-    // Another comment here
     const emailLower = email.toLowerCase()
     const allowedDomains = ['vanderbilt.edu', 'vumc.org']
     const isValidDomain = allowedDomains.some(domain => emailLower.endsWith(`@${domain}`))
@@ -29,19 +30,44 @@ export default function Auth() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        shouldCreateUser: true,
       },
     })
 
     if (error) {
       setMessage({ type: 'error', text: error.message })
     } else {
+      setShowOtpInput(true)
       setMessage({ 
         type: 'success', 
-        text: 'Check your email for the login link!' 
+        text: 'Check your email for the 6-digit login code!' 
       })
     }
     setLoading(false)
+  }
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage({ type: '', text: '' })
+
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpCode,
+      type: 'email',
+    })
+
+    if (error) {
+      setMessage({ type: 'error', text: error.message })
+    }
+    // If successful, the auth state will change and redirect automatically
+    setLoading(false)
+  }
+
+  const handleBackToEmail = () => {
+    setShowOtpInput(false)
+    setOtpCode('')
+    setMessage({ type: '', text: '' })
   }
 
   return (
@@ -57,30 +83,74 @@ export default function Auth() {
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                placeholder="you@vanderbilt.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-              />
-            </div>
+          {!showOtpInput ? (
+            // Step 1: Email input
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
+                  Email Address
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="you@vanderbilt.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Sending...' : 'Send Magic Link'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full px-4 py-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Sending...' : 'Send Login Code'}
+              </button>
+            </form>
+          ) : (
+            // Step 2: OTP code input
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <label htmlFor="otp" className="block text-sm font-medium text-slate-700 mb-1">
+                  Enter 6-Digit Code
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Sent to {email}
+                </p>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  required
+                  autoFocus
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-center text-2xl tracking-widest font-mono"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otpCode.length !== 6}
+                className="w-full px-4 py-3 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Verifying...' : 'Sign In'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBackToEmail}
+                className="w-full px-4 py-2 text-slate-600 hover:text-slate-900 transition-all text-sm"
+              >
+                ← Use a different email
+              </button>
+            </form>
+          )}
 
           {message.text && (
             <div className={`mt-4 p-4 rounded-xl text-sm ${
@@ -93,8 +163,10 @@ export default function Auth() {
           )}
 
           <p className="mt-6 text-center text-xs text-slate-400">
-            You'll receive a secure login link via email.<br />
-            Only vanderbilt.edu and vumc.org addresses accepted.
+            {!showOtpInput 
+              ? <>You'll receive a 6-digit login code via email.<br />Only vanderbilt.edu and vumc.org addresses accepted.</>
+              : <>The code expires in 1 hour.<br />Check spam if you don't see it.</>
+            }
           </p>
         </div>
       </div>
