@@ -804,7 +804,7 @@ export default function RoleMatcher({ session }) {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
           <h2 className="font-bold text-slate-900 text-lg mb-1">Why We Need Your Help</h2>
           <p className="text-sm text-slate-500 mb-3">
-            We're taking a deliberate <strong>bottom-up approach</strong> to AI strategy: six small "Entangled Trios"—each composed of an educator, a learner, and a tech/informatics SME—will independently explore AI opportunities and challenges from the perspective of their part of the education continuum. Their outputs will feed into a broader sense-making workshop where we'll synthesize themes, prioritize, and build a shared roadmap.
+            We're taking a deliberate <strong>bottom-up approach</strong> to AI strategy: six to ten small "Entangled Trios" — each composed of an educator, a learner, and a tech/informatics SME — will independently explore AI opportunities and challenges from the perspective of their part of the education continuum. Their outputs will feed into a broader sense-making workshop where we'll synthesize themes, prioritize, and build a shared roadmap.
           </p>
           <p className="text-sm text-slate-500 mb-3">
             The trio model ensures we hear from <strong>people closest to the work</strong> before leadership filters set in, and it gives every segment of our programs an equal voice.
