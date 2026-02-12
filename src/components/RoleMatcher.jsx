@@ -810,7 +810,7 @@ export default function RoleMatcher({ session }) {
             The trio model ensures we hear from <strong>people closest to the work</strong> before leadership filters set in, and it gives every segment of our programs an equal voice.
           </p>
           <p className="text-sm text-slate-500">
-            <strong>Your task:</strong> Suggest stakeholders who should be involved, assign people to open trio roles where you see a good fit, and propose a new trio if you identify a gap we haven't covered.
+            <strong>Your task:</strong> Suggest stakeholders who should be involved, assign people to open trio roles where you see a good fit, and propose a new trio if you identify a group we haven't covered.
           </p>
         </div>
 
