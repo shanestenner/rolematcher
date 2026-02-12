@@ -14,6 +14,9 @@ const sortByLastName = (a, b) => {
   return lastNameA.localeCompare(lastNameB)
 }
 
+// Original trio IDs that cannot be deleted
+const ORIGINAL_TRIO_IDS = ['trio-1', 'trio-2', 'trio-3', 'trio-4', 'trio-5', 'trio-6']
+
 const defaultTrios = [
   {
     id: 'trio-1',
@@ -110,6 +113,10 @@ export default function RoleMatcher({ session }) {
   const [additionalRoles, setAdditionalRoles] = useState([])
   const [stakeholders, setStakeholders] = useState([])
   const [newStakeholder, setNewStakeholder] = useState('')
+  const [comments, setComments] = useState([])
+  const [newComment, setNewComment] = useState('')
+  const [editingCommentId, setEditingCommentId] = useState(null)
+  const [editingCommentText, setEditingCommentText] = useState('')
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState('saved')
   const [lastSaved, setLastSaved] = useState(null)
@@ -133,6 +140,7 @@ export default function RoleMatcher({ session }) {
           setTrios(data.trios || defaultTrios)
           setAdditionalRoles(data.additional_roles || defaultAdditionalRoles)
           setStakeholders(data.stakeholders || [])
+          setComments(data.comments || [])
           setLastSaved(data.updated_at ? new Date(data.updated_at) : null)
           setLastUpdatedBy(data.updated_by_email)
         } else {
@@ -140,12 +148,14 @@ export default function RoleMatcher({ session }) {
           setTrios(defaultTrios)
           setAdditionalRoles(defaultAdditionalRoles)
           setStakeholders([])
+          setComments([])
         }
       } catch (err) {
         console.error('Load error:', err)
         setTrios(defaultTrios)
         setAdditionalRoles(defaultAdditionalRoles)
         setStakeholders([])
+        setComments([])
       } finally {
         setLoading(false)
       }
@@ -165,6 +175,7 @@ export default function RoleMatcher({ session }) {
             setTrios(payload.new.trios || defaultTrios)
             setAdditionalRoles(payload.new.additional_roles || defaultAdditionalRoles)
             setStakeholders(payload.new.stakeholders || [])
+            setComments(payload.new.comments || [])
             setLastSaved(new Date(payload.new.updated_at))
             setLastUpdatedBy(payload.new.updated_by_email)
             setSaveStatus('saved')
@@ -179,7 +190,7 @@ export default function RoleMatcher({ session }) {
   }, [session.user.id])
 
   // Save data to Supabase
-  const saveData = useCallback(async (newTrios, newAdditionalRoles, newStakeholders) => {
+  const saveData = useCallback(async (newTrios, newAdditionalRoles, newStakeholders, newComments) => {
     setSaveStatus('saving')
     try {
       const { error } = await supabase
@@ -189,6 +200,7 @@ export default function RoleMatcher({ session }) {
           trios: newTrios,
           additional_roles: newAdditionalRoles,
           stakeholders: newStakeholders,
+          comments: newComments,
           updated_at: new Date().toISOString(),
           updated_by: session.user.id,
           updated_by_email: session.user.email
@@ -209,10 +221,10 @@ export default function RoleMatcher({ session }) {
   useEffect(() => {
     if (loading) return
     const timer = setTimeout(() => {
-      saveData(trios, additionalRoles, stakeholders)
+      saveData(trios, additionalRoles, stakeholders, comments)
     }, 800)
     return () => clearTimeout(timer)
-  }, [trios, additionalRoles, stakeholders, loading, saveData])
+  }, [trios, additionalRoles, stakeholders, comments, loading, saveData])
 
   // Trio management functions
   const updateTrioName = (trioId, name) => {
@@ -253,6 +265,135 @@ export default function RoleMatcher({ session }) {
     setSaveStatus('unsaved')
   }
 
+  // Alternative suggestion management
+  const addAlternative = (trioId, roleId, stakeholderName) => {
+    if (!stakeholderName) return
+    setTrios(prev => prev.map(t => 
+      t.id === trioId 
+        ? { 
+            ...t, 
+            roles: t.roles.map(r => {
+              if (r.id !== roleId) return r
+              const alternatives = r.alternatives || []
+              // Don't add duplicates or self
+              if (alternatives.some(a => a.name.toLowerCase() === stakeholderName.toLowerCase()) || 
+                  r.assignee?.toLowerCase() === stakeholderName.toLowerCase()) {
+                return r
+              }
+              return {
+                ...r,
+                alternatives: [...alternatives, {
+                  name: stakeholderName,
+                  suggested_by: session.user.email,
+                  suggested_by_id: session.user.id,
+                  suggested_at: new Date().toISOString()
+                }]
+              }
+            })
+          }
+        : t
+    ))
+    setSaveStatus('unsaved')
+  }
+
+  const removeAlternative = (trioId, roleId, alternativeName) => {
+    setTrios(prev => prev.map(t => 
+      t.id === trioId 
+        ? { 
+            ...t, 
+            roles: t.roles.map(r => 
+              r.id === roleId 
+                ? { ...r, alternatives: (r.alternatives || []).filter(a => a.name !== alternativeName) }
+                : r
+            )
+          }
+        : t
+    ))
+    setSaveStatus('unsaved')
+  }
+
+  const addAdditionalRoleAlternative = (roleId, stakeholderName) => {
+    if (!stakeholderName) return
+    setAdditionalRoles(prev => prev.map(r => {
+      if (r.id !== roleId) return r
+      const alternatives = r.alternatives || []
+      if (alternatives.some(a => a.name.toLowerCase() === stakeholderName.toLowerCase()) ||
+          r.assignee?.toLowerCase() === stakeholderName.toLowerCase()) {
+        return r
+      }
+      return {
+        ...r,
+        alternatives: [...alternatives, {
+          name: stakeholderName,
+          suggested_by: session.user.email,
+          suggested_by_id: session.user.id,
+          suggested_at: new Date().toISOString()
+        }]
+      }
+    }))
+    setSaveStatus('unsaved')
+  }
+
+  const removeAdditionalRoleAlternative = (roleId, alternativeName) => {
+    setAdditionalRoles(prev => prev.map(r => 
+      r.id === roleId 
+        ? { ...r, alternatives: (r.alternatives || []).filter(a => a.name !== alternativeName) }
+        : r
+    ))
+    setSaveStatus('unsaved')
+  }
+
+  // Comment management
+  const addComment = () => {
+    const text = newComment.trim()
+    if (!text) return
+    
+    const comment = {
+      id: `comment-${Date.now()}`,
+      text,
+      author_id: session.user.id,
+      author_email: session.user.email,
+      created_at: new Date().toISOString()
+    }
+    setComments(prev => [...prev, comment])
+    setNewComment('')
+    setSaveStatus('unsaved')
+  }
+
+  const deleteComment = (commentId) => {
+    const comment = comments.find(c => c.id === commentId)
+    if (comment && comment.author_id === session.user.id) {
+      if (window.confirm('Delete this comment?')) {
+        setComments(prev => prev.filter(c => c.id !== commentId))
+        setSaveStatus('unsaved')
+      }
+    }
+  }
+
+  const startEditComment = (comment) => {
+    if (comment.author_id === session.user.id) {
+      setEditingCommentId(comment.id)
+      setEditingCommentText(comment.text)
+    }
+  }
+
+  const saveEditComment = () => {
+    if (!editingCommentText.trim()) return
+    setComments(prev => prev.map(c => 
+      c.id === editingCommentId 
+        ? { ...c, text: editingCommentText.trim(), edited_at: new Date().toISOString() }
+        : c
+    ))
+    setEditingCommentId(null)
+    setEditingCommentText('')
+    setSaveStatus('unsaved')
+  }
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null)
+    setEditingCommentText('')
+  }
+
   const addTrio = () => {
     const colors = Object.keys(colorSchemes)
     const newId = `trio-${Date.now()}`
@@ -272,6 +413,10 @@ export default function RoleMatcher({ session }) {
   }
 
   const deleteTrio = (trioId) => {
+    // Prevent deletion of original trios
+    if (ORIGINAL_TRIO_IDS.includes(trioId)) {
+      return
+    }
     if (window.confirm('Delete this trio? This cannot be undone.')) {
       setTrios(prev => prev.filter(t => t.id !== trioId))
       setSaveStatus('unsaved')
@@ -411,6 +556,16 @@ export default function RoleMatcher({ session }) {
     )
   }
 
+  const getPillColors = (type) => {
+    const pillColors = {
+      Educator: { bg: "bg-indigo-100", text: "text-indigo-800", border: "border-indigo-200", button: "text-indigo-500" },
+      Learner: { bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-200", button: "text-emerald-500" },
+      "Tech SME": { bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-200", button: "text-orange-500" },
+      "Critical Friend": { bg: "bg-red-100", text: "text-red-800", border: "border-red-200", button: "text-red-500" }
+    }
+    return pillColors[type] || { bg: "bg-gray-100", text: "text-gray-800", border: "border-gray-200", button: "text-gray-500" }
+  }
+
   const SaveIndicator = () => {
     const states = {
       saved: { icon: "✓", text: "Saved", color: "text-green-600" },
@@ -440,6 +595,7 @@ export default function RoleMatcher({ session }) {
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
     const buttonRef = useRef(null)
     const dropdownRef = useRef(null)
+    const searchInputRef = useRef(null)
 
     useEffect(() => {
       const handleClickOutside = (e) => {
@@ -460,6 +616,12 @@ export default function RoleMatcher({ session }) {
           left: rect.left + window.scrollX,
           width: rect.width
         })
+        // Focus search input after position is set, without scrolling
+        requestAnimationFrame(() => {
+          if (searchInputRef.current) {
+            searchInputRef.current.focus({ preventScroll: true })
+          }
+        })
       }
     }, [isOpen])
 
@@ -470,16 +632,42 @@ export default function RoleMatcher({ session }) {
       s.toLowerCase().includes(search.toLowerCase())
     )
 
-    const handleSelect = (name) => {
+    const handleSelect = (name, e) => {
+      if (e) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      // Capture scroll position before state change
+      const scrollY = window.scrollY
+      const scrollX = window.scrollX
       onChange(name)
       setIsOpen(false)
       setSearch('')
+      // Restore scroll position after React re-render
+      requestAnimationFrame(() => {
+        window.scrollTo(scrollX, scrollY)
+      })
     }
 
-    const handleClear = () => {
+    const handleClear = (e) => {
+      if (e) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      const scrollY = window.scrollY
+      const scrollX = window.scrollX
       onChange('')
       setIsOpen(false)
       setSearch('')
+      requestAnimationFrame(() => {
+        window.scrollTo(scrollX, scrollY)
+      })
+    }
+
+    const handleToggle = (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsOpen(!isOpen)
     }
 
     return (
@@ -487,7 +675,7 @@ export default function RoleMatcher({ session }) {
         <div 
           ref={buttonRef}
           className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white cursor-pointer flex items-center justify-between text-sm"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={handleToggle}
         >
           <span className={value ? 'text-slate-900' : 'text-slate-400'}>
             {value || placeholder}
@@ -508,15 +696,22 @@ export default function RoleMatcher({ session }) {
               width: dropdownPosition.width,
               zIndex: 9999
             }}
+            onMouseDown={(e) => {
+              // Only prevent default if not clicking on the search input
+              if (e.target.tagName !== 'INPUT') {
+                e.preventDefault()
+              }
+            }}
           >
             <div className="p-2 border-b border-slate-100">
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="Search stakeholders..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                autoFocus
               />
             </div>
             <div className="max-h-44 overflow-y-auto">
@@ -537,7 +732,7 @@ export default function RoleMatcher({ session }) {
                   <div
                     key={name}
                     className={`px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 ${value === name ? 'bg-blue-100 font-medium' : ''}`}
-                    onClick={() => handleSelect(name)}
+                    onClick={(e) => handleSelect(name, e)}
                   >
                     {name}
                   </div>
@@ -570,7 +765,7 @@ export default function RoleMatcher({ session }) {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">
-                Phase 1: Entangled Trio Assignments
+                Entangled Trio Assignments
               </h1>
               <p className="text-slate-500 text-sm">
                 AI Strategy for Medical Education • {trios.length} Trios • {totalRoles} Roles
@@ -589,21 +784,41 @@ export default function RoleMatcher({ session }) {
 
             <span className="text-sm text-slate-500">{session.user.email}</span>
             
-            <button onClick={() => exportFile('md')} className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-medium text-sm shadow-sm">
-              Export MD
-            </button>
-            <button onClick={() => exportFile('csv')} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all font-medium text-sm">
-              Export CSV
-            </button>
+            {session.user.email === 'shane.stenner@vumc.org' && (
+              <>
+                <button onClick={() => exportFile('md')} className="px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-all font-medium text-sm shadow-sm">
+                  Export MD
+                </button>
+                <button onClick={() => exportFile('csv')} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-all font-medium text-sm">
+                  Export CSV
+                </button>
+              </>
+            )}
             <button onClick={handleSignOut} className="px-4 py-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all font-medium text-sm">
               Sign Out
             </button>
           </div>
         </div>
 
+        {/* Purpose Explanation */}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
+          <h2 className="font-bold text-slate-900 text-lg mb-1">Why We Need Your Help</h2>
+          <p className="text-sm text-slate-500 mb-3">
+            We're taking a deliberate <strong>bottom-up approach</strong> to AI strategy: six small "Entangled Trios"—each composed of an educator, a learner, and a tech/informatics SME—will independently explore AI opportunities and challenges from the perspective of their part of the education continuum. Their outputs will feed into a broader sense-making workshop where we'll synthesize themes, prioritize, and build a shared roadmap.
+          </p>
+          <p className="text-sm text-slate-500 mb-3">
+            The trio model ensures we hear from <strong>people closest to the work</strong> before leadership filters set in, and it gives every segment of our programs an equal voice.
+          </p>
+          <p className="text-sm text-slate-500">
+            <strong>Your task:</strong> Suggest stakeholders who should be involved, assign people to open trio roles where you see a good fit, and propose a new trio if you identify a gap we haven't covered.
+          </p>
+        </div>
+
         {/* Stakeholder Pool */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
-          <h2 className="font-bold text-slate-900 mb-1">Stakeholder Pool</h2>
+          <h2 className="font-bold text-slate-900 text-lg mb-1">
+            <span className="text-blue-600">Step 1:</span> Add Stakeholders
+          </h2>
           <p className="text-sm text-slate-500 mb-3">
             Add people here, then assign them to roles below. Names can be assigned to multiple roles.
           </p>
@@ -663,7 +878,38 @@ export default function RoleMatcher({ session }) {
         </div>
 
         {/* Trios Grid */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
+          <h2 className="font-bold text-slate-900 text-lg mb-1">
+            <span className="text-blue-600">Step 2:</span> Match Stakeholders to Trio Roles
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">Assign stakeholders from your pool to each role in the trios below. If you identify a gap in coverage, use the "Add New Trio" card to propose additional trios.</p>
+          
+          {/* Role Types Reference */}
+          <div className="mb-4 p-4 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl">
+            <h3 className="font-semibold text-amber-900 mb-2 text-sm">Role Types Reference</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="bg-white/60 rounded-lg p-2">
+                <TypeBadge type="Educator" />
+                <p className="mt-1 text-slate-600 text-xs">
+                  Faculty members, directors, and instructional leaders responsible for curriculum and teaching.
+                </p>
+              </div>
+              <div className="bg-white/60 rounded-lg p-2">
+                <TypeBadge type="Learner" />
+                <p className="mt-1 text-slate-600 text-xs">
+                  Students, residents, fellows, and faculty in learning roles who experience the educational process.
+                </p>
+              </div>
+              <div className="bg-white/60 rounded-lg p-2">
+                <TypeBadge type="Tech SME" />
+                <p className="mt-1 text-slate-600 text-xs">
+                  Technology specialists, informatics experts, and early adopters who understand AI/tech capabilities.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
           {trios.map((trio) => {
             const colors = colorSchemes[trio.color] || colorSchemes.slate
             return (
@@ -695,15 +941,17 @@ export default function RoleMatcher({ session }) {
                           <option key={c} value={c}>{c}</option>
                         ))}
                       </select>
-                      <button
-                        onClick={() => deleteTrio(trio.id)}
-                        className="text-red-400 hover:text-red-600 p-1"
-                        title="Delete trio"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      {!ORIGINAL_TRIO_IDS.includes(trio.id) && (
+                        <button
+                          onClick={() => deleteTrio(trio.id)}
+                          className="text-red-400 hover:text-red-600 p-1"
+                          title="Delete trio"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -719,11 +967,63 @@ export default function RoleMatcher({ session }) {
                           className="flex-1 text-sm font-medium text-slate-700 bg-transparent border-none outline-none focus:bg-slate-50 rounded px-1"
                         />
                       </div>
-                      <SearchableDropdown
-                        value={role.assignee}
-                        onChange={(val) => updateRoleAssignee(trio.id, role.id, val)}
-                        placeholder="Select stakeholder..."
-                      />
+                      
+                      {/* Assignee - show pill if assigned, dropdown if not */}
+                      {role.assignee ? (
+                        <div className="flex items-center gap-2">
+                          {(() => {
+                            const pillColors = getPillColors(role.type)
+                            return (
+                              <span className={`inline-flex items-center gap-1 px-3 py-1.5 ${pillColors.bg} ${pillColors.text} rounded-lg text-sm font-medium border ${pillColors.border}`}>
+                                {role.assignee}
+                                <button
+                                  onClick={() => updateRoleAssignee(trio.id, role.id, '')}
+                                  className={`${pillColors.button} hover:text-red-500 font-bold ml-1`}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            )
+                          })()}
+                        </div>
+                      ) : (
+                        <SearchableDropdown
+                          value={role.assignee}
+                          onChange={(val) => updateRoleAssignee(trio.id, role.id, val)}
+                          placeholder="Select stakeholder..."
+                        />
+                      )}
+                      
+                      {/* Alternative suggestions */}
+                      {role.assignee && (
+                        <div className="mt-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs text-slate-500">Alternative suggestions:</span>
+                          </div>
+                          {(role.alternatives && role.alternatives.length > 0) && (
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {role.alternatives.map((alt, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs border border-amber-200">
+                                  {alt.name}
+                                  {alt.suggested_by_id === session.user.id && (
+                                    <button
+                                      onClick={() => removeAlternative(trio.id, role.id, alt.name)}
+                                      className="text-amber-500 hover:text-red-500 font-bold ml-0.5"
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <SearchableDropdown
+                            value=""
+                            onChange={(val) => addAlternative(trio.id, role.id, val)}
+                            placeholder="+ Suggest alternative..."
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -741,11 +1041,15 @@ export default function RoleMatcher({ session }) {
             </svg>
             <span className="font-medium">Add New Trio</span>
           </button>
+          </div>
         </div>
 
         {/* Additional Roles */}
         <div className="mt-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
-          <h2 className="font-bold text-slate-900 mb-3">Additional Roles</h2>
+          <h2 className="font-bold text-slate-900 text-lg mb-1">
+            <span className="text-blue-600">Step 3:</span> Assign Additional Roles
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">Assign stakeholders to cross-cutting roles that support all trios.</p>
           {additionalRoles.map((role) => (
             <div key={role.id} className="bg-gradient-to-r from-red-50 to-orange-50 rounded-xl p-4 border border-red-100">
               <div className="flex items-center gap-2 mb-2">
@@ -755,37 +1059,157 @@ export default function RoleMatcher({ session }) {
                 <span className="font-semibold text-slate-800">{role.title}</span>
               </div>
               <p className="text-sm text-slate-600 mb-3">{role.description}</p>
-              <SearchableDropdown
-                value={role.assignee}
-                onChange={(val) => updateAdditionalRoleAssignee(role.id, val)}
-                placeholder="Select stakeholder..."
-              />
+              
+              {/* Assignee - show pill if assigned, dropdown if not */}
+              {role.assignee ? (
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const pillColors = getPillColors('Critical Friend')
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-3 py-1.5 ${pillColors.bg} ${pillColors.text} rounded-lg text-sm font-medium border ${pillColors.border}`}>
+                        {role.assignee}
+                        <button
+                          onClick={() => updateAdditionalRoleAssignee(role.id, '')}
+                          className={`${pillColors.button} hover:text-red-600 font-bold ml-1`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )
+                  })()}
+                </div>
+              ) : (
+                <SearchableDropdown
+                  value={role.assignee}
+                  onChange={(val) => updateAdditionalRoleAssignee(role.id, val)}
+                  placeholder="Select stakeholder..."
+                />
+              )}
+              
+              {/* Alternative suggestions */}
+              {role.assignee && (
+                <div className="mt-3 pt-3 border-t border-red-200">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-slate-500">Alternative suggestions:</span>
+                  </div>
+                  {(role.alternatives && role.alternatives.length > 0) && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {role.alternatives.map((alt, idx) => (
+                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 rounded text-xs border border-amber-200">
+                          {alt.name}
+                          {alt.suggested_by_id === session.user.id && (
+                            <button
+                              onClick={() => removeAdditionalRoleAlternative(role.id, alt.name)}
+                              className="text-amber-500 hover:text-red-500 font-bold ml-0.5"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <SearchableDropdown
+                    value=""
+                    onChange={(val) => addAdditionalRoleAlternative(role.id, val)}
+                    placeholder="+ Suggest alternative..."
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
 
-        {/* Role Types Reference */}
-        <div className="mt-5 p-5 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl">
-          <h3 className="font-bold text-amber-900 mb-3">Role Types Reference</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div className="bg-white/60 rounded-xl p-3">
-              <TypeBadge type="Educator" />
-              <p className="mt-2 text-slate-600 text-xs">
-                Faculty members, directors, and instructional leaders responsible for curriculum and teaching.
-              </p>
-            </div>
-            <div className="bg-white/60 rounded-xl p-3">
-              <TypeBadge type="Learner" />
-              <p className="mt-2 text-slate-600 text-xs">
-                Students, residents, fellows, and faculty in learning roles who experience the educational process.
-              </p>
-            </div>
-            <div className="bg-white/60 rounded-xl p-3">
-              <TypeBadge type="Tech SME" />
-              <p className="mt-2 text-slate-600 text-xs">
-                Technology specialists, informatics experts, and early adopters who understand AI/tech capabilities.
-              </p>
-            </div>
+        {/* Ideas and Comments */}
+        <div className="mt-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+          <h2 className="font-bold text-slate-900 text-lg mb-1">
+            <span className="text-blue-600">Step 4:</span> Share Ideas &amp; Comments
+          </h2>
+          <p className="text-sm text-slate-500 mb-4">Share any other thoughts, suggestions, or ideas for the AI strategy process.</p>
+          
+          {/* Add new comment */}
+          <div className="mb-4">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment or idea..."
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm resize-none"
+              rows={3}
+            />
+            <button 
+              onClick={addComment}
+              disabled={!newComment.trim()}
+              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Add Comment
+            </button>
+          </div>
+
+          {/* Comments list */}
+          <div className="space-y-3">
+            {comments.length === 0 ? (
+              <p className="text-sm text-slate-400 italic">No comments yet. Be the first to share an idea!</p>
+            ) : (
+              comments.map(comment => (
+                <div key={comment.id} className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  {editingCommentId === comment.id ? (
+                    // Editing mode
+                    <div>
+                      <textarea
+                        value={editingCommentText}
+                        onChange={(e) => setEditingCommentText(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm resize-none"
+                        rows={3}
+                        autoFocus
+                      />
+                      <div className="flex gap-2 mt-2">
+                        <button 
+                          onClick={saveEditComment}
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all font-medium text-xs"
+                        >
+                          Save
+                        </button>
+                        <button 
+                          onClick={cancelEditComment}
+                          className="px-3 py-1.5 text-slate-600 hover:text-slate-800 transition-all font-medium text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // View mode
+                    <div>
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap">{comment.text}</p>
+                      <div className="flex items-center justify-between mt-3 pt-2 border-t border-slate-200">
+                        <div className="text-xs text-slate-400">
+                          <span className="font-medium text-slate-500">{comment.author_email}</span>
+                          {' • '}
+                          {new Date(comment.created_at).toLocaleDateString()}
+                          {comment.edited_at && ' (edited)'}
+                        </div>
+                        {comment.author_id === session.user.id && (
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => startEditComment(comment)}
+                              className="text-xs text-slate-500 hover:text-blue-600 transition-all"
+                            >
+                              Edit
+                            </button>
+                            <button 
+                              onClick={() => deleteComment(comment.id)}
+                              className="text-xs text-slate-500 hover:text-red-600 transition-all"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

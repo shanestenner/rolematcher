@@ -15,13 +15,12 @@ export default function Auth() {
 
     // Validate email domain
     const emailLower = email.toLowerCase()
-    const allowedDomains = ['vanderbilt.edu', 'vumc.org']
-    const isValidDomain = allowedDomains.some(domain => emailLower.endsWith(`@${domain}`))
+    const isValidDomain = emailLower.endsWith('@vumc.org')
 
     if (!isValidDomain) {
       setMessage({ 
         type: 'error', 
-        text: 'Only vanderbilt.edu and vumc.org email addresses are allowed.' 
+        text: 'Only vumc.org email addresses are allowed.' 
       })
       setLoading(false)
       return
@@ -76,7 +75,7 @@ export default function Auth() {
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              Phase 1 Role Matcher
+              Role Matcher
             </h1>
             <p className="text-slate-500 text-sm">
               AI Strategy for Medical Education
@@ -93,7 +92,7 @@ export default function Auth() {
                 <input
                   id="email"
                   type="email"
-                  placeholder="you@vanderbilt.edu"
+                  placeholder="you@vumc.org"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -164,7 +163,7 @@ export default function Auth() {
 
           <p className="mt-6 text-center text-xs text-slate-400">
             {!showOtpInput 
-              ? <>You'll receive an 8-digit login code via email.<br />Only vanderbilt.edu and vumc.org addresses accepted.</>
+              ? <>You must use a vumc.org email address to access this tool.<br />An 8-digit login code will be sent to your email.</>
               : <>The code expires in 1 hour.<br />Check spam if you don't see it.</>
             }
           </p>
