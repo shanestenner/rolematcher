@@ -475,7 +475,7 @@ export default function RoleMatcher({ session }) {
 
   // Export functions
   const generateMarkdown = () => {
-    let output = "# Phase 1: Entangled Trio Role Assignments\n\n"
+    let output = "# VUSM RoleMatcher: Entangled Trio Role Assignments\n\n"
     output += `*Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}*\n\n`
     output += "---\n\n"
     
@@ -765,7 +765,7 @@ export default function RoleMatcher({ session }) {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">
-                Entangled Trio Assignments
+                VUSM RoleMatcher
               </h1>
               <p className="text-slate-500 text-sm">
                 AI Strategy for Medical Education • {trios.length} Trios • {totalRoles} Roles

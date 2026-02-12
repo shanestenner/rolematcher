@@ -1,4 +1,4 @@
-# Phase 1 Role Matcher
+# VUSM RoleMatcher
 
 A collaborative tool for assigning stakeholders to roles in the "Entangled Trio" sessions for the Enterprise AI Strategy for Medical Education initiative.
 

@@ -75,7 +75,7 @@ export default function Auth() {
         <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-slate-900 mb-2">
-              Role Matcher
+              VUSM RoleMatcher
             </h1>
             <p className="text-slate-500 text-sm">
               AI Strategy for Medical Education

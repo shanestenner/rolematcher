@@ -1,4 +1,4 @@
--- Supabase SQL Schema for Phase 1 Role Matcher
+-- Supabase SQL Schema for VUSM RoleMatcher
 -- Run this in your Supabase SQL Editor (Database > SQL Editor)
 
 -- Create the role_assignments table
